@@ -1,0 +1,10 @@
+[project]
+name = "onlycomment"
+version = "1.0.0"
+description = "Telegram-бот: в группе обсуждений канала оставляет только ответы"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
