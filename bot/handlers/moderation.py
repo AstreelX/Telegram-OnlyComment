@@ -14,6 +14,7 @@ from bot.middlewares.settings import ChatSettingsMiddleware
 from bot.models import ChatSettings
 from bot.services.chat_cache import ChatCache
 from bot.services.moderation import MessageFacts, should_delete
+from bot.services.permissions import is_chat_admin
 from bot.services.warnings import Warner
 
 logger = logging.getLogger(__name__)
@@ -78,18 +79,30 @@ async def _collect_facts(
     sender_chat = message.sender_chat
     user_id = message.from_user.id if message.from_user else None
 
-    info = await chat_cache.get(bot, chat_id) if settings.exempt_admins or settings.exempt_channel else None
     from_admin = (
         (sender_chat is not None and sender_chat.id == chat_id)  # анонимный админ
         or user_id in config.owner_ids
-        or (info is not None and user_id in info.admin_ids)
+        or (
+            settings.exempt_admins
+            and sender_chat is None
+            and user_id is not None
+            and await is_chat_admin(bot, chat_cache, user_id, chat_id)
+        )
     )
     # Только связанный канал: от имени своего канала может писать любой участник
-    from_channel = sender_chat is not None and info is not None and sender_chat.id == info.linked_chat_id
+    from_channel = (
+        settings.exempt_channel
+        and sender_chat is not None
+        and sender_chat.id == (await chat_cache.get(bot, chat_id)).linked_chat_id
+    )
+    reply = message.reply_to_message
 
     return MessageFacts(
         is_service=message.content_type not in USER_CONTENT,
-        is_reply=message.reply_to_message is not None,
+        is_reply=reply is not None,
+        # Пост канала и комментарии лежат в ветке, а отдельные сообщения админов,
+        # связанного канала и служебные — нет. Ответы на них уводили бы разговор из комментариев.
+        reply_to_top_level=reply is not None and not reply.is_automatic_forward and reply.message_thread_id is None,
         in_post_thread=await _in_post_thread(message, posts),
         from_admin=from_admin,
         from_channel=from_channel,

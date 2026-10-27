@@ -47,3 +47,7 @@ class ChatCache:
         )
         self._items[chat_id] = info
         return info
+
+    def forget(self, chat_id: int) -> None:
+        """Следующий `get` перечитает данные чата, например после смены админов."""
+        self._items.pop(chat_id, None)

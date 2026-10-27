@@ -14,6 +14,8 @@ class Config(BaseSettings):
 
     db_path: Path = Path("data/bot.db")
     log_level: str = "INFO"
+    # Прокси для запросов к Telegram: http://..., socks5://user:pass@host:port
+    proxy: SecretStr = SecretStr("")
 
     mode: Literal["polling", "webhook"] = "polling"
     drop_pending_updates: bool = False

@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator, AsyncIterator
 from itertools import count
+from time import monotonic
 from typing import Any
 
 import pytest
@@ -10,12 +11,12 @@ from aiogram.client.session.base import BaseSession
 from aiogram.methods import DeleteMessage, SendMessage, TelegramMethod
 from aiogram.types import Chat, Message, Update
 
-from bot.app import create_dispatcher
+from bot.app import create_bot, create_dispatcher
 from bot.config import Config
 from bot.db.database import Database
 from bot.db.repo import ChatSettingsRepo, PostThreadsRepo
 from bot.models import ReplyMode
-from bot.services.chat_cache import ChatInfo
+from bot.services.chat_cache import ChatCache, ChatInfo
 from bot.services.warnings import Warner
 
 CHAT = -1001
@@ -104,8 +105,17 @@ async def test_non_reply_deleted(env) -> None:
 
 async def test_reply_kept(env) -> None:
     dp, bot, session = env
-    await dp.feed_update(bot, _msg(reply_to_message=_reply_to(5)))
+    # ответ на пост и на комментарий в его ветке
+    await dp.feed_update(bot, _msg(reply_to_message=_reply_to(5, is_automatic_forward=True)))
+    await dp.feed_update(bot, _msg(message_thread_id=5, reply_to_message=_reply_to(6, message_thread_id=5)))
     assert not session.of(DeleteMessage)
+
+
+async def test_reply_to_admin_top_level_deleted(env) -> None:
+    dp, bot, session = env
+    admin_message = _reply_to(5, **{"from": {"id": ADMIN, "is_bot": False, "first_name": "Админ"}})
+    await dp.feed_update(bot, _msg(reply_to_message=admin_message))
+    assert len(session.of(DeleteMessage)) == 1
 
 
 async def test_unknown_chat_ignored(env) -> None:
@@ -201,3 +211,28 @@ async def test_settings_button_by_user_denied(env) -> None:
     await dp.feed_update(bot, _press(USER, "enabled"))
     assert (await dp["repo"].get(CHAT)).enabled
     assert session.of(AnswerCallbackQuery)[0].show_alert
+
+
+async def test_admin_change_resets_cache(env) -> None:
+    dp, bot, _ = env
+    cache = ChatCache()
+    cache._items[CHAT] = ChatInfo("Обсуждения", CHANNEL, frozenset(), monotonic())
+    dp["chat_cache"] = cache
+    user = {"id": USER, "is_bot": False, "first_name": "Тест"}
+    update = Update(
+        update_id=next(_ids),
+        chat_member={
+            "chat": {"id": CHAT, "type": "supergroup", "title": "Обсуждения"},
+            "from": {"id": ADMIN, "is_bot": False, "first_name": "Админ"},
+            "date": 0,
+            "old_chat_member": {"status": "member", "user": user},
+            "new_chat_member": {"status": "left", "user": user},
+        },
+    )
+    await dp.feed_update(bot, update)
+    assert CHAT not in cache._items
+
+
+def test_proxy_session() -> None:
+    config = Config(_env_file=None, bot_token="42:TEST", proxy="socks5://127.0.0.1:1080")
+    assert create_bot(config).session.proxy == "socks5://127.0.0.1:1080"

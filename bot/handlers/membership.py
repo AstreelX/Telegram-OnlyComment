@@ -9,6 +9,7 @@ from aiogram.types import ChatMemberUpdated, Message
 from bot import texts
 from bot.config import Config
 from bot.filters import IN_GROUP, AllowedChat
+from bot.services.chat_cache import ChatCache
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,14 @@ async def on_bot_added(event: ChatMemberUpdated, bot: Bot, config: Config) -> No
         await bot.leave_chat(event.chat.id)
     except TelegramAPIError as e:
         logger.warning("Не удалось выйти из %s: %s", event.chat.id, e)
+
+
+@router.chat_member(IN_GROUP)
+async def on_member_changed(event: ChatMemberUpdated, chat_cache: ChatCache) -> None:
+    # Кого-то назначили админом или сняли: без этого бот до 5 минут считал бы его обычным участником.
+    # Telegram присылает такие апдейты, только пока бот — админ чата.
+    if event.old_chat_member.status != event.new_chat_member.status:
+        chat_cache.forget(event.chat.id)
 
 
 @router.message(F.migrate_to_chat_id, IN_GROUP, AllowedChat())
