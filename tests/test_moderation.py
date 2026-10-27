@@ -12,6 +12,9 @@ THREAD = ChatSettings(chat_id=1, reply_mode=ReplyMode.THREAD)
     [
         (MessageFacts(), ANY, True),
         (MessageFacts(is_reply=True), ANY, False),
+        # ответ на отдельное сообщение админа — не комментарий
+        (MessageFacts(is_reply=True, reply_to_top_level=True), ANY, True),
+        (MessageFacts(is_reply=True, reply_to_top_level=True, from_admin=True), ANY, False),
         (MessageFacts(is_automatic_forward=True), ANY, False),
         (MessageFacts(is_service=True), ANY, False),
         (MessageFacts(), ChatSettings(chat_id=1, enabled=False), False),

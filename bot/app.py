@@ -1,5 +1,6 @@
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.types import BotCommand, BotCommandScopeAllChatAdministrators, BotCommandScopeAllPrivateChats
 
@@ -28,8 +29,10 @@ ADMIN_COMMANDS = [
 
 
 def create_bot(config: Config) -> Bot:
+    proxy = config.proxy.get_secret_value()
     return Bot(
         config.bot_token.get_secret_value(),
+        session=AiohttpSession(proxy=proxy) if proxy else None,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True),
     )
 
